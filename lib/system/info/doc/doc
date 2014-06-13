@@ -1,0 +1,988 @@
+Preface
+	What is this framework?
+		A 4th rewrite of a framework I am only now taking efforts to make public.
+	What is the purpose of this framework?
+		Logical flexibility, large customizability, large immediate functionality.
+		
+	It seems that many other frameworks seem to try to hide the language from the programmer.  This leads to dependency on the framework.  There is a general principle I state, if not follow: Diverge from previous utility only when significantly benefitial.  To give an example of diverging from previous utility without significant benefit, in much of the codeigniter code I've seen I've seen "$this->input->post" used in a way which has no benefit over $_POST.
+	
+	
+	There are a couple of things I imagine a framework could be useful for.
+		Dealing with CSS, javascript, JSON, XML
+		Request handling logic
+		Session logic
+		Caching
+		Template handling logic
+		Database utilities
+		Other utilities
+	
+CSS and JS handling
+	In the logic of a page, there can be various additions or alterations to what css and js is included on a page.  Sometimes it is important to have a specific order of inclusion, and sometimes knowing exactly what is included is important.   And, potentially, diverse sections of script can modify the inclusions list.  So, I'd say there should be a global list of css and js
+	
+	Because, at this point in php, in php you can not define special handling for setting a array element, setting css will be done using a function.
+
+
+Sessions
+	Rely on database based sessions.  As such, requires database connection and specific tables.
+	
+Environment
+	Set environmental variables in apache config for virtual host like
+		SetEnv VAR_NAME VAR_VALUE
+
+Naming
+	Classes
+		Classes are upper camel cases simply because it is a trend in programming languages and required by some.[[humor]]  And I like following trends; hey look, a cliff.  The WKB (we know best) International Programming Standards Organization IPSO was considering mandating a "The" before all classes to further distinguish the classes from regular variables, but after 10 years the WKBIPSO still haven't come to a decision.[[/humor]].
+		
+		Of course, you can name the classes just about anyway you want and the autoloader will still work.
+
+File naming
+	Name php files with .php
+
+Instance Includable directory organization
+	In this directory, there are multiple types of potential files:
+		general instance classes
+		section specific instance classes
+		
+	Further, general instance classes can be grouped.  For instance, there can be multiple classes grouped in a "user" folder, such as a generic "user" class and a "permissions" class.  To distinguish general instance classes from section  specific classes, section classes should be in a folder "section/SECTION" where "SECTION" is the name of the section.
+
+Autoload
+	Prelude
+		Before getting into the details of what the framework autoloader does, I'll go into the reasons for an autoloader.  Without an autoloader, there are two things you can do (mixing them is possible):
+			1. Load every potentially used resource at start
+			2. Call a load resource function for a resource each time it will be used in case it was not loaded at a prior time.
+			
+		Without the autoloader, the choice seems to be adding a "require_once" for all resources needed in multiple files.  This leads to many duplicate "require_once" statements.  Pros & cons:
+			Cons:
+				-A class/piece-of-code may require different resources depending on which methods/logic-pathways are used; thus, even loading all resources at start of file can be excessive loading; some resources might not be used.
+				-When a programmer is writing a class method, he will need to remember to write require_once statement for each resource he uses.  Although this seems like an easy pitfall to avoid, when someone gets used to a resource being available in one class, when they start working on another class they might forget that the resource is not already available in that class.
+				-The laundry list of require_once statements at the top of a class tends to look messy (causes temporary distraction) and can be a hassle to create.
+				-When a resource is no longer used in the code, the programmer may neglect removing the require_once not knowing that what code he/she removed was the last use of the resource
+			Pros:
+				-The require_once lines at the top of the file make it easy to see what a class or piece of code depends on.
+		
+		The simple solution to this would be to have an autoloader, which, based on the resource name, ensure the resource was loaded when necessary.  The exact implementation of this becomes more complicated when the sources of resources become complex.
+		
+		If all the resources resided in one or two folders, like a "class" folder, then the autoloader could simply pick files out of those folders.  However, there are some problems that can occur with increasing complexity:
+			-When many folders for resources are added, which folders to check first can be a performance issue.
+			-When folders are added in an arbitrary manner not known the the autoloader, the autoloader has to check which folders exist and then apply a predefined prioritization logic to the discovered folders
+			-When folders have files which potential naming conflicts, prioritization becomes more important, and renaming becomes a possible solution.
+			-When folders do have multiple files with class naming conflicts, a static prioritization logic may not suffice in all cases.	
+		
+		The complications needed to be factored in this framework are:
+			Libraries may use "_" in included file names, or other file names nonconforming to framework class naming
+			Class names may conflict and prioritization of includes may change
+		
+		
+	
+	When a unpredefined class is included, there are a number of potential places to get the class from:
+		system/
+			includable
+			lib/
+				external/
+				internal/
+		instance
+			includable/
+				./
+				section/
+			lib/
+				external/
+				internal/
+		
+	To make using the autoloader easy, I have allowed for both specific and general class referencing.  Specific referencing is when a class reference uses the path to the class in the class name.  Logically, specfic referencing is handle with higher priority than general class referencing; specificity is checked and if it fails, generality is checked.
+	
+	Specific referencing:
+		Because there are many, there becomes an issue with prioritization and naming conflicts.  To solve this, class names used in class using code will be contexting.  Class defining code will not necessarily have contexting class names.  The behavior will be as follows:
+			Class use code:
+				Prefixes will be used to indicate destination.  Prefixes will be composites (to indicate preceeding directory) with lower camel casing being used.
+				Name prefix destination
+					"sys" : system folder
+					"ins"	: instance folder
+						"inc" : includable
+							"sec" : section folder
+						"lib" : library folder
+							"ext"	: external folder
+							"int"	: internal folder
+					
+				Eg:
+					To instantiate a system internal library date class: "new sysLibIntDate;" 
+					
+				Upon arriving at any folders possible in the combination of prefix contexting, a further behavior is necessary for potential subfolders.  All subfolders are indicated use "__FOLDER", with "__" at the very end of the contexting to indicate the end of the folder path.  The reason two underscores are used is to avoid potential conflicts with naming on external libraries.
+				
+					Eg:
+						If an instance had a users general instance folder with a general instance permissions folder with a class in the folder "Admin", accessing it would be done by:
+							"new insInc__user__permissions__Admin
+						Note: If you happened to define both "instance/includable/user__permissions__Admin.php" and "instance/includable/user/permissions/admin.php" or if you so happen to have a folder with "__" in the name, I'm working hard on a solution for this ( a mind reading time traveling code parser ).  
+
+							
+				
+				Note:
+					-Although non-expected paths can be used "sysLibDate", I recommend that you keep all the class files in expected folders.
+					-You can temporarily confuse the autoloader (hence the confusing autoloader code (fight fire with fire)) in the case where a part or whole of a class name is the same as a folder which the autoloader can consider a prefix or subfolder.  This does not necessary cause a problem, as the autoloader functions like this:
+						
+						(please note use of "go to" statements)
+						
+						check for prefix at current name parsing stage
+						1: if prefix/subfolder
+							check prefix/subfolder against folders
+							if folder exists
+								move current name parsing stage to include last prefix/subfolder.  Go to 1.
+							else
+								Go to 2:
+						2: else
+							check for class
+							if class is found
+								load class
+							else
+								go back one folder and assume last prefix/subfolder was part of class name.  Goto 2
+	General/uncontexted class referencing				
+		If specfic referencing isn't used, the autoloader looks for the class in all potential class folders with the following prioritization (high to low):
+			system/includable/
+			system/includable/EXISTING_FOLDERS/LOOP
+			instance/includable/
+			instance/includable/section/CURRENT_SECTION/
+			instance/includable/section/CURRENT_SECTION/EXISTING_FOLDERS/LOOP
+			instance/includable/EXISTING_FOLDERS/LOOP
+			instance/library/internal/
+			instance/library/internal/EXISTING_FOLDERS/LOOP
+			instance/library/external/
+			instance/library/external/EXISTING_FOLDERS/LOOP
+			system/library/internal/
+			system/library/internal/EXISTING_FOLDERS/LOOP
+			system/library/external/
+			system/library/external/EXISTING_FOLDERS/LOOP
+		
+		Relying on the autoloader to load a system external library function like "system/library/external/coolLibrary/section/subsection" will potentially increase load times, though, because classes are loaded only once, this is unlikey to be significant.
+		
+		Some timings:
+			Test 1 
+				File: system/includable/bob/test
+				Code timed: sysInc__bob__Test::bob(); 
+				Time range: 0.00011 to 0.00010
+				Note: Other specific references should take comparable times.
+			Test 2
+				File: system/includable/bob/test
+				Code timed: Test::bob(); 
+				Time range: 0.00010 to 0.000098
+			Test 3
+				File: system/library/external/bob/test
+				Code timed: Test::bob(); 
+				Time range: 0.00020 to 0.00017
+				Note: Given this is one of the lowest priorty resource folders, the time has doubled.  This test was done without many files or folders int he resource folders.
+			Test 4
+				File: system/library/external/bob/test
+				Code timed: sysLibExt__bob__Test::bob();
+				Time range: 0.00013 to 0.00012
+				Note: As expected, the specific reference time is large the same in test 4 compared to test 1
+				
+		The philosophy behind the order of priority is use frequency.  In the case that priority leads to unwanted results, specific referencing can be used.
+		
+		If the autoloader fails to load a class at that point, it will throw an error;
+			
+	Class define code:
+		The class name in the class definition does not need to be the same as the class name in the class use (referencing) code.  The class name can be either be the fully contexted name, or it can be the fully uncontexted name.  In the case that it is the fully uncontexted name, the autoloader will make a new class on the fly so that the fully contexted class name can be used in place of the fully uncontexted class name; this will inrease load times and there will be problems if the class uses __class__.  Cases for using:				
+			Cases:
+				-If it is expected that the class name will be unique without contexting prefixes, than contexting prefixes need not be used in the class definition (and potentially not in referencing code following initial autoload trigger).  
+				-If the class is an external library class or series of classes that are self referencing and rely on specific class names, contexting prefixes would probably interfere with the normal function of the external library (and therefore can be excluded in class definition).
+				
+		The increased load times
+			measurements:
+				Using a medium sized class (the Debug class) for a template, executing "eval('class a'.$i.' extends bob{}');" the time to repeat 10k times ranged from .072 and .057 seconds.
+				Using a empty class, the same ranged from .050 to .041
+			Analysis
+				For me, this measurement is acceptable for including this functionality.
+		
+	
+	Class file name
+		the file name of a class should be its non contexted name
+
+
+	Multiple autoloaders
+		You have the option to add additional autoload functions
+		
+		
+		
+	
+	
+	
+	
+	
+	disClass = always checks display folder 
+	insDisGen (skip utilities folder)
+	insGen (skip utilities folder)
+	
+	
+	
+
+Variables containing folder locations
+	The choice here is whether to end the string with '/' or not.  Useing '/' in the variable pros and cons:
+		Pros:
+			concatenating further folders or files does not take an additional '/', so $folder.$file can be done.
+		Cons:
+			1.if the folder name is used for the purpose of finding other things with changes to the folder name, the '/' would be a problem:
+				folder = /var/bob
+				open(/var/bob1/config.php)
+				do something
+				open(/var/bob2/config.php)
+				do something
+			2.imploding and exploding works better without a trailing '/'
+			3.php functions and constants tend not to include trailing '/'
+	
+	To take advantage of both ways, I will name variables excluding the "/" with the affix "location" and variables including the "/" with the affix "folder".
+Error messages
+	System going down:
+		"Someone forgot how to treat camels"
+		"The monkeys have been at the code again"
+		"You have compelled site to stop working and the programmers to start"
+		"All progamers are currently busy"
+		"TP, helping clean up the crap"
+
+The Controller
+	This is what one might consider to be the "page" logic.  That is, the web request points to something, and if that request points to what ends up being a script,, regardless of whether the pointing involved other scripts,, , there is a sort of "page" logic going on when that script is run.  Basically, what a "page" logic is is the logic that translates a user command to one or many system commands.  You might distinguish user and system commands by thinking about the difference between how a programmer might get the system to do something and then how a user might get the system to do something.  A programmer would most likely just bypass the web interface and use underlying functions.
+	
+	Further, I would argue, and be 100% correct because it is a term I made up, that page logic should contain logic handling the passing of system logic output values to display handlers.
+
+Default Request handling
+	Forward
+		What is request handling
+			Just with most other things in life, where exactly request handling stops and non-request-handling-categorized code starts is fuzzy.  This, primarily, because "request handler" categorization is an arbitrary categorization of code where a continuous process exists.  
+
+		Conventionally, URLs will statically define a resource in a way very similar to the file path.  That is, directories match and often file names match:
+			File:	/var/www/bob.com/music/bobsYodeling.mp3
+			URL: http://bob.com/music/bobsYodeling.mp3
+		
+		With this conventional URL to file mapping, request handling was simple and could be easily defined as the process of finding the file which needs to be sent or executed; and this process did not have to know anything about what the application did:
+			request handling -> application -> output
+		
+		Sometimes, in more recent times, URL to file mapping became divergent for various pruposes including obscuring and user friendliness:
+			Obscuring
+				File:	/var/www/bob.com/music/bobsYodeling.mp3
+				URL: http://bob.com/music/awesomePopMusic.mp3
+			Consumer friendly
+				File:	/var/www/bob.com/loopJsPopup.php
+				URL: http://bob.com/loopJsPopup
+
+		At this level, the request handler may or may not be a part of the application.  It doesn't matter whether the handler is part because the translation between requested file and actual file is so simple it doesn't require any application specfic logic.  However, this URL to file divergence (UFD) can become much more complex.  The complexity comes in what I would like to say is two forms:  1, complexity beyond the functionlity of the web server; 2, complexity dependent on the purpose of the application.  Both of these complexities lead the request handling within the application code being necessary.
+		
+		And, since primary distinction between request handling and "application logic" has been lost, what's left is a cascade of request handling eventually leading to output.
+			request handling -> output
+		
+		With the current way filesystems exist, however, there is a need to determine single static categorizations for organization.  So, here I go about defining a request handler:
+			Request:
+				1.	The URL and all data submitted to server during single server "request"/page-load except cookie data.
+			Request handler definition:
+				1.	Logic which is primarily concerned with URL path, GET, or POST, and which has no other potential non-request function, and which isn't the "controller".
+				
+			Eg:
+				request handler code:
+					if($_POST['submit'] && $_FILES['file]){
+						addUserPhoto($_POST,$_FILES['file]);
+					}
+				non request handler code
+					function addUserPhoto($photoDetails,$photoFileDetails){
+						...
+					}
+				non request handler code
+					<div>$photoName</div>
+				Rationale:
+					The function is not a request handler because it can be used for non request functionality.  For instance, if one had a database with photo details and photo file information, one might use that function and instead of passing request variables as parameters, pass database data.  Also, the second not request example is meant to indicate that templates or display files are usually not part of the request handler.
+	
+	A while back now, a number of frameworks started transforming the query string into the path.  These frameworks were "MVC" frameworks and had controllers which tended to include methods which would otherwise be represented by separate pages.  I imagine the thought process went like this:  "Well, since we are already parsing the url path to get the method that corresponds to the URL file, which is,, essentially,, parsing the path for code specfic logic, we might as well put the rest of the query string, which is,, essentially,, there for code specific logic, into the path; it will look better to the user"
+	You might ask, "how can I see into the minds of these other framework programmers so well?"  I'll tell you.  I imagine a programmer, and I take away reason and accountability.  I kid.
+	
+	After throwing away the idea of making request handling completely based on sequencing smiley faces in the path (bob.com/:)/:.}), I decided to look at the pros and cons of divergence from URL direct file connection:
+		Pros
+			- Allows user friendly paths
+				- paths which can be remembered and typed easily
+			- Allows for one to many mapping of URLs to pages
+				- Allows for generic section pages to be used for request pages that don't exist and don't map to anything
+			- Allows context based mapping:
+				-Mapping based on previous page:
+					"bob.com/register/ -> bob.com/step1", "bob.com/unregister" -> 'bob.com/step1"
+				-Mapping to a method based on resource attached to request; say, to handle different file types
+			- Allows hiding of proprietary file and directory organization (still waiting for my patent request response)
+		Cons
+			- Order of path parts is important.  Order of query string variables is almost never important.
+			-	Can make finding what a path corresponds to difficult
+				- Can make programming harder for newly incoming programmers on to the project
+			- Can make development slower
+	
+	Clearly URL to file divergence has considerable benefits.  But there are a number of ways to have URL to file divergence (UFD).  Primarily, frameworks either use regular expressions rules or page to class method logic.  Back in 2007 when I started the first version of the framework, I didn't like either of those two methods.  But, I imagine some people do and so I will take my usual macromanagement approach to custom page request functionality:	
+			Me: "You do it"
+			Them: "But how"
+			Me: "I don't care"
+			[(later)Me:	"You did it wrong"]
+	
+	But, for many, I expect the fact you are using a your framework and not building your own indicates you would probably have someone else build the request handling functions.  So, the problem for me becomes, how much effort do I want other programmers to have to exert to deal with request handling, and what can I foresee as how programmers might already organize their files in relation to a request:
+		Programmer exertion:
+			In terms of a working with a framework related features, programmers tend to only want to exert themselves if the features aren't there or if the features aren't compatible with desired functionality.
+			When a feature is not compatible with desired functionality, if there is no built in way to change the functionality, changing the functionality of how a framework does something is often difficult and requires high programmer exertion; therefore, predictable desires should be accounted for.
+			When possible, standards/defaults should be in place, and whenever something is done in a standard way, there should be little or no need for a programmer to do anything to get the system to act in a standard way.
+		File organization:
+			Apart from that one company I was at that obfuscated their backend files and directories, programmers tend to have a similar file organization, if not the same, to the web organization.  
+			In the case there is URL to file divergence, it is usually predictable:
+				removal of ".php" extension
+				section class with method handlers for pages
+			
+		With these considerations, I will use an altered version of my version 1 framework request handling:
+
+			Localized handling:
+				
+				This method uses some main navigation file which finds other navigation files based on the path and than passes control over to them.  In this way, each section of a site can have it's own type of request handling with some defaults in place.  Further, subsections of a section can have even more defaults in place:
+					Eg:
+						File Structure:
+							/nav.php
+							/sections/complaints/
+								nav.php
+								anonymous/
+									nav.php
+									page.php
+									page2.php
+								nonAnonymous/					
+									page.php
+									page2.php
+							Request
+								bob.com/complaints/anonymous/page
+							Request handle flow
+								/nav.php
+								/sections/complaints/nav.php
+								/sections/complaints/anonymous/nav.php
+								/sections/complaints/anonymous/page.php
+							Request
+								bob.com/complaints/nonAnonymous/page
+							Request handle flow
+								/nav.php
+								/sections/complaints/nav.php
+								/sections/complaints/nonAnonymous/page.php
+								
+					Pros:
+						Groups areas of interest
+						Default functionality means 
+						
+						...........................................................
+						
+					
+	determined one way one way of going about the problem
+	
+	
+	I discovered that I had already analyzed this problem a year ago.  Specifically, I analyzed what I didn't like about having one file that served as a sort of section file for a series of requests which would otherwise be different files.  My analysis was based on:
+	
+	"
+		Basis[ (B)]:
+		1. Smaller files easier to look at
+		2. Less redundant or excessive code is better
+		3. Parts of an area of concern should be grouped, 
+			areas of concern:
+				a page
+				common section functions
+				inc functions
+		4. Divergent areas of concern should be seperated
+		5. Easy to access and edit code
+		6. Theory of MVC should be adhered to as much as possible
+		7. Code easy to understand
+	"
+	
+	I don't care to rewrite my entire analysis (for consumption by others), but I will get to the main points.  By having one big file (a model calss like in codeigniter) that contains all methods, representing pages, for a section, there are various cons and one pro:
+		Pros
+			B5, one page for all concerns
+		Cons
+			B6, Model must know about UI (method names corresponding to pages)
+			B1, big page
+			B3, concerns not grouped; page methods are all together; ie, all the functions that might deal with a single page are grouped in the same way airplane toys are all grouped in a landfill (they're all in the landfill).
+			B4, Common category/section functions and page specfic funcions are mixed inthe same file
+	
+	Having given up on the MVC hooey, you can eliminate B6 from the cons.  However, there was clearly many frameworks I did not like on the bases of how the dealt with request-to-code controlling.  This, however, does not damn the pattern of divergence from URL direct file connection.  
+	
+	Pros and cons of moving towards abstraction and divergence:
+		
+			
+	
+	
+	
+	
+	
+	-----
+Directory and file organization, and available variables
+		Organizing based on areas of concern goes without saying, but when concerns overlap there are problems.  But, as this is a problem free framework, I will draw arbitrary lines and pretend everything is hunky dory:
+			
+			Request handlers: Defined elsewhere in doc.
+			
+			Scoped Utilities: Basically, each utility has a scope.  A math library could be used on a wide range of coding projects.  A sessions class could only be used in a project requiring sessions.  
+				Scopes:
+					General: For just about any php project
+					System general: For php projects using the framework
+					Instance general: For any subsequent code within a single instance of the framework
+					Section general: For any pages within a section
+				It is the case that occasionally someting cane be useful out of scope.  For instance, one instance general class might be useful in a separate instance, or even to most other instances.  Similarly, a code with a scope of section general may on infrequent occasions become useful in sections which are not the original scope.  For instance:
+					With a section "userMessaging" and "sales" section, an action in the sales section might require the use of a userMessaging function.  
+				The decision of whether to upscope something is dependent on how well it would fit into the next scope up.
+			
+			Data handlers: 
+				Data controllers: logic that reflects on state of data and uses this reflection to control the data doers.
+				Data doers: Logic which stores, morphs, or makes available data.  Data can be anything from a database to a picture.
+			
+			Controllers:	Defined elsewhere in doc.
+			Output code: Code responding to the form of data made available by the data handlers via the controllers by selecting, generating, buffering, and/or formatting output.
+			
+		
+		What knows about what:
+			Section utilities know about the section
+			Instance utilities know about the instance
+			Request handlers know about the controllers
+			Controllers know about data handlers, output code
+			Data controllers know about data doers
+			Data doers know about data controllers
+			Output code knows about data doers
+
+		So, given this this categorization, I will explain the current directories in the "instance" and "system" folder:
+		
+		instance:
+			lib: general scoped utilities
+				external: external to the instance (no coded by instance coders)
+				internal: internal to the instance (coded by instance coders)
+			includable:	instance scoped utilities
+			
+				
+		utilities
+			general
+			system
+			instance
+				section
+					page
+		controllers
+			URL to FILE like directories
+		request handlers
+			URL to FILE like directories
+		display
+			URL to FILE like directories
+			
+			looks at state of "model" and based on state, decides up and renders template
+			
+			pass control from:
+				general -> section -> sub section -> page -> sub section -> section -> general
+				
+			So that before a page template is run, general common functionality can be applied, then back to general so that general functionality that relies on page specific display functionality can function.
+				
+Classification of utilities and organization
+	Apart from the scopee, the utilites can be classified as follows:	
+		Data handling
+		Display handling
+		Session handling
+	Data being all the information that is central to the purpose of the application.  
+	
+	To make the separation a little bit more clear, what you have when a request comes in is like this:
+		(Arrows represent data)
+		data handling <---- controller <---- request handling, session handling <---- system <---- request
+		controller ----> display handling ---> response
+		
+	Even in the case were display handling contains utilities which aren't tied to a specific request, the display handling utilities are still geared towards formatting data for a response of some kind.
+	
+	Looking further into what display handling involves, it tends to involve:
+		generating output
+			templates
+			generating functions
+		formatting functions
+		filtering functions
+	
+	When the database holds data which is used primarily for the generating of display, then it might make sense to have the display generator functions access that data directly.  For instance, if a request is loading a page in which the data objects passed to the display handlers by the controller are positioned on the page based on records in the database, then having the display handlers access the database for getting the position violates no law accept the arbitrary one which states that the database is what is used to distinguish the model from other stuff.  To make this a little easier to swallow, I might change the example from object positions to templates; such that the database stores page templates.  
+	
+	Of course, this does not mean database code will be showing up in templates.  But it does bring a separate need to distinguish the code based on file organization.  So, within the display folder I will have two folders: "utilities" and "templates".
+	
+	There is the issue of what to have in the system and what do leave to the instance.  One might reason that all scoped utilities above the instance should be in the system and all scoped utilities at or below the instance should be in the instance.  But, there is a separate consideration.  The consideration is the integrity of the system.  That is, it serves to have everything in the system folder the same between same versions of the code on different servers; so that the instance folder becomes the primary determiner of what is different for that particular instance.  With this consideration I would include utilities with scopes about an instance in the instance folder.  In this way, if a non system generally utility is included, it is easily distinguished as a utility that was brought in for the purpose of the instance although the scope of the utility is general.
+	
+	There is an acception to this.  In the case where someone is willing to sacrifice the sanctity of the system setup for the ability to have many instances relying on some customized system setup, then adding some general class to the system utility might be preferable to adding the same class to all the instance's that rely on it.
+	
+	The session handling code is the same with most requests.   It is usually a small amount of code.  For these reasons, I have decided to put it into the system.  
+	
+	There is the issue of whether or not to distinguish external code from internal code.  One of the reasons for doing this is the same reason for keeping the integrity of the system folder.  New versions of the system that come out would need modifications if the system folder was modified locally.   However, this can be done by separating any multiclass external resource into it's own folder such that all the files in that folder stay the same as what the resourse has it it's folder.  And, apart from that, knowing which class files were gotten externally can be done by adding comments within the file.  So, I don't see a significant enough reason to have an "internal" and "external" folder to separate the utilities further.
+	
+	
+Controller
+	Controller will have available all utilities specific to a page
+		controllers/blogs/post includes:
+			utilities/section/blogs/post.php or utilities/section/blogs/post/files.php
+		
+	
+	
+Pluralizing Directories
+	The reason for pluralizing would be to indicate the difference between directories which are mixed categories and directories which are non-mixed categories.  A example of this would be a "scripts" directory containing just scripts, and a "desktop" directory containing a mix of things.  Also, a folder with the name "script" might be describing one script that has many files (another mixed category).  Since there is possible ambiguity I'll name folders that contain non mixed items in the pluralized form: "controllers".
+	
+Instance, section, and page utilities
+	The issue here was whether to have instance and page subdirectories within the instance  folder.  I chose to not include the section folder in the instance folder because the section folder is distinct in that it is almost always linked to a page request, while instance utilities can be used by, say, scripts which are completely apart from page requests.  
+	
+	For the most part, it need not be done because it can be assumed there are multiple things in the directory.
+
+
+
+Coding guidelines
+
+
+	Purpose: clarity and efficiency in typing.
+
+		* Efficiency in typing
+		* Efficiency in reading
+		* Efficiency in changing
+
+
+	-General efficiency
+
+	Like in computers, efficiency in people relates to the changeability in function. The most efficient functionality can be found in embedded systems with low changeability. Introduction of a hard drive leads to scanning latency. Similarly, the less diverse a responses someone is expected to respond with, the faster that person will respond. This is for two reasons:
+
+	For one, there is a period of evaluation - which tool should be used for the problem? The period of evaluation is related to whether there is a quantitative mapping to decisions. For instance, if I knew that all problems of size X were to be solved with A, and all problems with size Y were to be solved with B, then I would have a mapping. This mapping would decrease the amount of time it would take me to determine whether a problem should be solved with A or B because I would not have to try to judge qualitatively and I would not have to construct my own mapping.
+
+	The second speed decreaser is found in increasing amount of needed recall. If I were given a mapping of types of nails to types of hammers and told to select the correct hammer for each nail of a specified type I received, the time it would take me to select a hammer would depend on the number of mapping elements. If there were only two hammer types and two nail types, I could make the decision fairly quickly; though, not as fast as if there were only one. If there were 50 types, not only would my recall be slower, but I might have to take time to look back at a reference sheet for the mapping.
+
+
+	So, by providing a coding standard, mapping is introduced. Further, by reducing the coding standard mappings to the bare minimum that encapsulate all the problems, the need for recall is reduced. By having this minimum mapping, efficiency of typing, reading, and changing is increased. Apart from mapping and minimizing recall, there are some aspects to efficiency particular to the types of efficiency.
+
+
+	-Typing efficiency
+
+	Quite simply, the number of characters and the ease of which those characters are typed. Ease of typing is variable among people, so I will simply consider the number of characters to be typed. As such, the characters used should be minimized to the point where further minimization would lead to a higher value loss in reading efficiency. The level of readability is dependent on the code and who is reading the code. If code is intended to be read by anyone, the the use of "function" to describe the language function construct would be needed. If the code is intended to be read by those with a modicum of intuition, the use of "func" would be sufficient. If the intention is for those who are specialized in the language, then "f" might suffice.
+
+
+	-Reading efficiency
+
+	Reducing reading error by ensuring the clear delineation of token ends and starts, and the minimization of token ambiguity. Delineation of tokens tends to increase typing. For instance "(bob,bill)" might be typed "( bob , bill )" to increase delineation of tokens. As such, the amount of delineation is determined by the value of decreased typing vs the value of increased delineation. The value of increased delineation is dependent on how much the increased delineation increases clarity. Most parsers ignore white space in situations like "( bob , bill )", and as such, the parse does not need the space delineation to be clear on the meaning. People, on the other hand, tend to be space sensitive.
+
+	As stated above, readability is dependent on the reader along with the material. This is particularly true because of token ambiguity. To a neophyte, the variable “db” might be ambiguous. To someone used to programming with “db” as a database object variable, the ambiguity is lessened. But, even then, the context of the program might be such that the term “dealing broker” is commonly referred to with “db”, and so, even with someone used to “db” as a database object variable, there may be ambiguity. So, token ambiguity is reader and context dependent. Decreasing ambiguity can be done with standards or with increasing the descriptive quality of a name. Increasing the descriptive quality tends to increase typing, and so this must be weighed. More project specific standards increases the learning curve.
+
+
+	-Changing efficiency
+
+	Decreasing dependencies tends to increase the ease of changing something. For instance, many languages allow single statement conditions to use no brackets. If this language feature were used and if someone wanted to change the content of such a conditional to include another line, they would have to add brackets. If brackets were added originally, the dependency would be removed and a change of adding another line to the conditional statement would not require the adding of brackets - they would already be there.
+
+
+
+	Coding standards:
+
+
+		Naming
+
+
+			[Camel casing is good, however, there are certain problems.  With words which are case dependent, like brand names, conforming the words to camel casing can make the work ambiguous.  Say, company "grOUp" was the affix to "db".  In which case, you would have dbGroup.  That this is actually something like dbDell is ambiguous.  "db_grOUp" would not be ambiguous.  However, for the vast majority of variables and naming situations, camel casing is sufficient.  So, my standard is, go with camel casing except in cases where there is significant ambiguity.]
+
+			General
+				Try for single word
+				Use lowerCamelCase
+				
+				Abbreviations:
+					Use when clear to viewer
+					Use for core/common components
+					Treat abbrevication as a word
+						example: (uid = user identification)
+							getUid()
+							uidGet()
+
+			Very optional: Another consideration is special consistent naming for certain types of variables.  For instance, if a variable were an array, having that array prefixed with "a" to indicate the variable was an array.  The point of doing this is clarity.  "aBoat" clearly indicates multiple boats.
+				Special names:
+					- Arrays: affix "A"
+						deer, deerA
+					- Integers: affix "I"
+					- Objects: affix "O"
+					
+		
+		Conditional Structure
+			Combine if statements when practical; unless there are many if clauses and separation with commentary would make them more readable
+				ex
+					bad
+						if C1
+							if C2
+					good
+						if C1 && C2
+
+			Avoid excessive elses; unless it is not immediately clear that the else is not needed, (ie, unless useful for clarity)
+				ex
+					bad
+						if C!
+							return true
+						else
+							return false;
+					good
+						if C!
+							return true
+						return false
+
+		Spacing
+			Tabs
+				Use tabs for indentation.
+				Do not use multiple tabs to make purely visual alignments. [Code isn't read like columns, it's read per line.  Separating the value further from the variable just makes for more typing and longer scanning]
+					ex:
+						bad
+							hello	= bob
+							hi		= sue
+						good
+							hello = bob
+							hi = sue
+				Line continuations merit 1 tab
+					x = yyyyyyyyyyyyyy...yyyyy
+						yyyyyyyyyyy
+					if yyyyyyyyyyyyyy...yyyyyyyyyyyy
+						yyyyyyyyyyyyyyyyyyyyy
+				Items in brackets have one increase in theoretical indentation level.  
+						Ex:  (line continuation + indentation)
+							x = yyyyy..yyyyy array(array(
+										key = value
+									)
+								)
+							x = yyyyy..yyyyy array(
+									array(
+										key = value
+									)
+								)
+			Spaces
+				Use on assignment, comparison, comma separation, ternaries, conditionals
+		Brackets
+			Always use brackets
+				ex
+					good
+						if(bob){
+							sue
+						}
+					bad
+						if(bob)
+							sue
+			Place right after describer.  [Since the benefit of doing it this way is so clear, and since there can be no argument for doing it the other way, I will not explain my reasoning]
+				ex
+					good
+						array(
+							key = value
+						)
+						if(C){
+							CODE
+						}
+					bad
+						if(C)
+						{
+							CODE
+						}
+						if(C
+								C
+								C)
+						{
+			Match ending bracket indentation with theoretical starting bracket indentation.
+			Theoretical according to what level of indentation would the starting bracket be if it were on its own line
+				ex
+					bad
+						x = yyyyy..yyyyy array(array(
+								key = value
+							))
+					good
+						x = yyyyy..yyyyy array(array(
+									key = value
+								)
+							)
+			Curly bracket alignment supercedes line continuation indentation
+				ex
+					good
+						if(C
+								C
+								C
+						){
+					bad
+						if(C
+								C
+								C
+								){
+		Foreach
+			Except for a foreach construct with around 20 or less lines, foreach assigned variables should be specific.
+			In the case where the foreach construct as 20 or less lines, generic variables can be used ($k,$v).  [This based on the programmer decaying memory and attention theory]
+				ex
+					good
+						foreach($bobs as $bob){
+							...50 lines
+						}
+						foreach($bob as $v){
+							...5 lines
+						}
+					bad
+						foreach($bobs as $v){
+							...50 lines
+						}
+
+		Variable assignment
+			Array elements should only be assigned to variables when: There is a one to many relationship between the variables and the array elements (array as an array of arrays with username, while there is only one $username variable),	and such variables are used more than twice
+				$x = array(
+						array(username,userid)
+						array(username,userid)
+						...
+					);
+				foreach($x as $v){
+					$username = $v['username'];
+					use $username 3+ times
+				}
+			However, doing this risks obfuscating the code
+			
+		Comments
+			Describe the following line or lines with a commment
+				ex
+					good
+						#checks if user is logged in
+						if($userIsLoggedIn){
+					bad
+						if($userIsLoggedIn){
+							#checks if user is logged in
+						if($userIsLoggedIn){#checks if user is logged in
+			
+			In scenarios where putting comments on a separate line than the line of code either is cumbersome or is visually obstructing, place comments on same line ( inline) of code:
+				ex
+					array(
+							'bob' => 'sue' #I don't like bob
+							'bill' => 'jill' #I like bill
+						);
+					
+					if($x && $y && $z
+							&& $q #checks q is not false
+							&& $z #rechecks z
+							&& $g
+					){
+			...
+			
+			Which comment indicator to use:  Whichever
+			
+			When describing variables, it can be useful to have shortened identifiers of language structures and contextual descriptors:
+				A: array
+				S: string
+				O: object
+				...: continuation or same as above
+				
+				Ex
+					$bob = array(
+							array(
+								'sue' => 'dan',
+								'eli' => 'moe'
+							),
+							array(
+								'joe' => 'bill'
+							)
+						)
+					Described as
+						A(A(S=>S,...),...)
+				
+
+			Commenting functions: 
+				describe the parameters, the return, and a description of the function:
+					ex
+						/*
+						 *	Is a function with the name comment remover followed by some code.
+						 *	
+						 *	@bob: Array of files to decomment: A(F,F,...)
+						 *
+						 *	returns success array: A(success=>true|false,error=>S)
+						 */
+						function commentRemover($bob){...
+			
+				
+			
+			Although humor is fun, it does not help to convey the meaning of the code and should be avoided in any type of documentation.
+			
+			Commenting pages
+				If you feel like wasting time, benefiting other developers, than it is occasionally useful to describe what a page is for so that the broad concept of the page is conveyed.  However you want to do this is fine, but I imagine placing the comment at the top of the page is preferable by most.
+				
+			When to comment
+				I find the best time to comment code is 6 months down the line when I'm not sure whether the code I'm looking at is something I coded or my alter ego coded.
+			
+
+
+
+Request handling
+	request -> map -> section controller -> page controller ->
+	
+	Either the handler knows about the page or it doesn't.  THere is the case that query string variables can be passed to a utility function to determine which page controller should be run.  But, eventually, the page determination just starts replacing controller functionality.  You can have the controller check to see if there was a POST with a certain key, and if there was, perform some action.  Or, you can have the request handler check the POSTs and change the page to a controller which just does that action.  I suppose the way to do it is just to have routing actions, which then call some section controller, which then optionally passes control back to the request handler, which then proceeds to call the next section or page controller.  
+	
+	I could make forced separation, such that there are levels of the request handler before it starts handing off control to the controllers.  In such a way where at each token of the url, it looks for another file to load for the mappings.   The benefit of this would be that it would be more clear where things went by looking at just the request handler folder; instead of, potentially, having hundreds of routes in one file.
+	
+	Having the routers bounce between controller and route is probably no good, as the interest of the route is different than the interest of the controller.  The controller and section controllers are interested in doing non-route actions.  As such, the request handler will parse the request in some very common way, determine the route, and then call the items in the route unless one of the items tells it to stop.
+	
+	
+Using the database class
+	The db class can either be used as an instance or statically.  Once the Db class is instantiated, you can either use something like "$db->method" or "Db::method", and it will use the first connection object, or whichever connection object is named by Db::primary.
+	
+	If you are using mysql, the Db class sets mode to ANSI; this means "'" now is used to define tables and rows instead of "`".  So, quote strings in SQL with ".
+	
+	Common use:
+	 * 	get single value
+	 * 		$db->qRow('select name from user where id = 2')
+	 * 		$db->sRow('user','2','name')
+	 *	get single row
+	 * 		$db->qRow('select * from user where id = 2')
+	 * 		$db->sRow('user','2')
+	 * 		$db->sRow('user','id = 2')
+	 * 		$db->sRow('user',array('id'=>'2'))
+	 * 	get rows
+	 * 		$db->qRows('select * from user where id > 2')
+	 * 		$db->sRows('user?>','2')
+	 * 	insert
+	 * 		$db->in('user',array('id'=>1,'name'=>'bob')
+	 * 	insert unescaped "name"
+	 * 		$db->in('user',array('id'=>1,':name'=>'bob')
+	 * 	delete user 1
+	 * 		$db->del('user',1)
+	 * 	update user 1
+	 * 		$db->up('user',array('name'=>'sue'),1)
+	 
+	 
+	 $db = Db::init(array(
+		'dsn'=>'mysql:dbname=humval;host=localhost',
+		'user'=>'root',
+		'pass'=>''));
+
+	print_r($db->qRow('select * from test'));;
+	print_r(Db::qRow('select * from test'));;
+	 
+	 
+Naming of system classes
+	For classes which will be used primarily internally or likely only few times by an instance, I have prepended "Hv" to indicate they are framework classes and so they don't interfere with instance class naming.  However, for those system classes which are intended by be used heavily by the instance, I have no appeded such, as the point of name is twofold: convenience and distinction; and for common classes, the convenience for something like "Db" would be dropped significantly if "Db" were replaced with "HvDb".
+	
+	
+Session class
+	Basically, projects can be served best by varying types of session.  In some cases, it serves to have sessions in the database.  Sometimes it servers to have a memcached and database session.  Sometimes simple file sessions serve best.  When files sessions are used, it tends to be that sessions are used in a sort of indiscrimite fashion.  And so, in this way, there is a distinction between the normal php session handling and the HvSession handling. HvSession handling does various checks before starting the session, and will check to make sure the person sending the cookie with the session id is the right person (to the extent practical).  As such, there is a HvSession::initialize() function that will return whether the session was verified, and if it was not (either does not exist or failed verification of legitimacy), you have to call HvSession::create().
+	
+	If you want to use the HvSession for the database, you have to have certain db tables.
+
+Display:
+	My first versions of this framework, I notices a problem with the templating systems I had used in the passed.  I implemented a russian doll style templating where the inner part of the page would be called first, and the the outer parts; and the content of the inner would be given for placement to the outer part.  I will use an improved version of this system for templating.
+	
+	There are a couple of issues here.  In the past framework versions, I got away with varied and multi leveled templates by having one series of passing and everything else being considered components gotten by a "getCmp" method:
+	
+	page
+		header (getCmp)
+			head1 (getCmp)
+			head2 (getCmp)
+		body generic (pass content)
+			body section (pass content)
+				body page (pass content)
+		footer (getCmp)
+		
+	However, a deficiency with this system is that the logic of which component to show ends up being in the template itself; And if there is anything that I think should be followed and is a natural pattern, it is the separation of logic and design.
+	
+	This, then, leads to a controller which calls utilities and then calls some display function; the display function then decides based on the page and available data which templates to call and how to format the data.
+	
+	Although it might be more idealic to separate the actual decision of which templates to display from the controller as a sort of separation of display logic and business logic, there is a problem with this separation: The display logic for determining which displays to show are largely in the same scope as the page controller; that is, the logic is largely specific to an individual page, and if you were to separate this logic you would probably end up with a duplicate directory structure in the display folder just for modeling the lineage of the page scope for the display.  
+	
+	So, I figured I might as well keep the template calling in the controller, but I'm left with the problem of where to put inner template display logic.  So, it order to get the worst of both worlds, I figured I'd put the template calling in the controller but allow for special handling based on the structure of the display folder:
+		If a series of templates is called like: "body[blogs/inner1[blogs/inner2]]", the display class will:
+			
+			Try to see if there is a blogs/display.php which servers as common logic and formatting for all templates in blogs
+			Look for blogs/inner2 and see if it is a directory or a file (file with ext .php)
+			
+				if directory
+					look for blogs/inner2/display.php and call it
+				else
+					look for blogs/inner2.php
+			
+			Don't look for blogs/display.php again because it was already called once, continue following the pattern of the above though.
+			
+	It should be noted here that templates, for the most part, don't get passed variables.  The reasoning behind this is that there is a page data object made available to everything concerned with the data; afterall, why should any page data be hidden from templates?  There is an exception to this;  template components are passed variables.
+	
+	
+	-The idea of naming templates is that the controller can have a general idea of what to call, head, body, footer, while the display class does a further determination.
+	
+	-passing templates to display::gets();
+		
+Page Object
+	I had another consideration.  The consideration was whether utility functions would be able to access the page object directly, or whether the utilities functions would pass data back to the controller and the controller would put the data in the page object.  Well, this consideration was hinged on the idea that by allowing the utility functions to access the page object would some be moving the utility functions to the page scope.  This idea, however, I would say is incorrect.  The page object is a system specific aspect and can be used on many different pages in many different sections on many different instances.  That is, the use of the page object does not limit the scope to a page, but rather limits the scope to the system.
+	
+	The concept of the page object is that it serves to allow the controller to link the utility function return data and the display logic without having to know a good deal about both.
+	
+	When keeping track of simple variables, avoiding globals is fine.  But when you have multi level functions from which the deeper functions may or may not effect some variable that is used much closer to the surface levels, not using globals can cause messy code.  Say, for instance, you are collecting error information in a series of leveled functions.  
+	
+	scope a
+		f1
+			f2 [error potential]
+				f3
+				f4 [error potential]
+			f5
+		f6
+			f7 [error potential]
+			f8
+		
+	In order to get potential errors down to scope a, f1, f2, f6 would have to be able to handle and return error data.  But, this error data may be divergent from the main purpose of the functions.  So, you have f1 returning something like array(mainData,errors).  But, it might not even be scope a which deals with errors.  It might be further down the line.  
+	
+	The point of avoid globals is to make code clearer.  That is, if everything were in global scope, the effect of a function could by on anything and in order to track an unexpected change, all functions would have to be investigated.  Additionally, if someone wanted to know the intended effect of a function, they would generally just have to look at the return values.
+	
+	When a variable is broadly effectable and potential distant from use, the benefits outway the cons of making the variable global.
+	
+	Accessing page
+	
+		page::get('bob')
+		page::get('bob')->val['sue']
+		$page->bob['sue']
+		
+		
+Rethinking display
+	The separation of controller and display is something I want to rethink.  There can be some cases where someone wants to censor/filter output.  The switch of whether to do so or not could be apart from the controller, as it might not have anything to do with the page and it is a display issue.  As such, it shouldn't be in the page controller, and since, for the sake of this instance, it is just a display matter, so it shouldn't be in the section controllers.  Instead, I imagine it should be in some main display logic.  So, it seems the separation is meritted here.
+	
+	Then there is the issue of having lots of logic in a template.  Sure, foreachs for displaying data which is simply output, but when there are further complications, it can mean the template ends up being a matter for programmers instead of designers.  For instance, in my version 3 of my framework, the generic template head this in the top of the file:
+	
+	"
+		global $uriCmp, $uo, $notice, $noAds;
+		$title = $mdl->title?strip_tags($mdl->title):'Generic Page';
+		dis::$json['un'] = U_NAME;
+		dis::$json['u'] = usr::$id;
+		dis::$json['section'] = $mdl->section;
+		if(sh::$user){
+			dis::$json['loggedIn'] = 1;
+			if($_SESSION['a']){
+				dis::$json['a'] = 1;
+			}
+		}
+		dis::$json['menu'] = array(
+			array('Home','/','home'),
+			array('Accounts','/account','account'),
+			array('Opportunities','/opportunity','opportunity'),
+			array('Leads','/lead','lead'),
+			array('Ideas','/idea','idea'),
+			array('Employees','/employee','employee'),
+			array('Finances','/finance','finance'),
+			array('Chargebacks','/chargeback','chargeback'),
+			array('Ledger','/ledger','ledger'),
+			array('Developer','/developer','developer'),
+			array('Email','/email','email'),
+			array('Reports','/report','report'),
+			array('Pipeline', '/pipeline', 'pipeline'));
+
+		dis::$json['recentItems'] = cmn::getRecentItems();
+		dis::$json['sideSearch'] = array('on'=>true);
+
+		if(dis::$customStructure){
+			dis::$json['customStructure'] = 1;
+		}
+		if(!$mdl->noReminders){
+			dis::$json['reminders'] = usr::reminders();
+		}
+		#json page view configuration, unrelated to other json
+		dis::viewConfig();
+
+		dis::$json['dateFormatSetting'] = usr::getSetting('dateFormat');
+		#show status color user setting
+		if(usr::getSetting('statusColors')){
+			array_unshift($mdl->css,'statusColors.css');
+		}
+		#default js and css to be prepended to page specific css and js
+		array_unshift($mdl->css,'base.css','theme.css','sf.css');
+		array_unshift($mdl->js,'jquery-1.2.6.js','common.js','structure.js','menu.js','menus.js','enricher.js','editor.js','sysMsgs.js');
+	
+	"
+	
+	So, there clearly appears to be something it at least some templates that can be placed somewhere besides the template itself.
+	
+	The issue becomes whether something like /instance/display/logic/display.php should be called just once, or multiple times.
+	
+	By only calling it once, there is the assumptiong that either all the data for the display has been made available for using, or all the data the logic/display.php will need to handle is loaded, or that the logic/display.php isn't going to handle any data from the controller function calls.
+	
+	Since general display logic can be handled at level 0 templates using custom classes in display/utilities/, I won't bother having the template caller go through some complex calling.  It will just call the template.
+	
+	
+Page
+		static $error = array();
+	static $warning = array();
+	static $success = array();
+	static $notice = array();
+	static $clear = array();
+	static $parent = '';
+	
+Page json
+	The easiest way for php to communicate to javascript is probably by use of a system json object which is passed over to a javascript variable when the page is rendered; or at least that is the way I've been doing it and I'm lazy so it's likely there is no easier way.  And although no templates are included in the system, there are some default template and files in the instance to be used as example this.
+	
+CSS inclusion
+	Often there are css files on a site which are used on every page or every page in a certain section.  Having to manually indicate on each page that the css should be included can be needlessly effortful.  

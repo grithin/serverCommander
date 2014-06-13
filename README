@@ -1,0 +1,7 @@
+Requires the php5-sqlite package, and "expect"
+
+type "php command.php" for usage.
+
+Will output to ./log
+
+I included a example db.sqlite3
